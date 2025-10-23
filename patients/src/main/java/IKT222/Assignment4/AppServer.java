@@ -9,11 +9,10 @@ public class AppServer {
 
     WebAppContext webapp = new WebAppContext();
     webapp.setContextPath("/");
-    // Use absolute path so it works no matter where gradle starts from
     webapp.setResourceBase(new java.io.File("src/main/webapp").getAbsolutePath());
     webapp.setParentLoaderPriority(true);
 
-    // Register our servlet (annotation mapping is also fine; this is explicit)
+    // register our servlet
     webapp.addServlet(AppServlet.class, "/*");
 
     server.setHandler(webapp);
