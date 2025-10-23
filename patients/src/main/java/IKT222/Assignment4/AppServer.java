@@ -1,4 +1,4 @@
-﻿package IKT222.Assignment4;
+package IKT222.Assignment4;
 
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.webapp.WebAppContext;
