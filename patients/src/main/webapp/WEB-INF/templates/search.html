@@ -1,0 +1,19 @@
+<!doctype html><html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/css/bootstrap.min.css">
+<title>Search – Patient Records System</title></head><body>
+<div class="container">
+  <div class="d-flex justify-content-between align-items-center mt-4 mb-4">
+    <h1 class="mb-0">Search Patients</h1>
+    <div><span class="mr-3">Welcome, <strong>${username?html}</strong></span>
+      <a class="btn btn-outline-secondary btn-sm" href="/logout">Logout</a></div>
+  </div>
+  <form action="/search" method="POST">
+    <div class="row"><div class="col-12 col-md-6 col-lg-4">
+      <div class="form-group"><label for="sn">Patient Surname</label>
+        <input id="sn" type="text" class="form-control" name="surname" placeholder="e.g. Smith" required>
+      </div></div></div>
+    <button type="submit" class="mt-2 btn btn-primary">Search</button>
+  </form>
+</div>
+</body></html>
