@@ -1,50 +1,36 @@
 plugins {
-  id 'java'
-  id 'application'
-  id 'idea'
+    id 'java'
+    id 'application'
 }
 
 repositories {
-  mavenCentral()
-}
-
-dependencies {
-  implementation (
-    'org.eclipse.jetty.aggregate:jetty-all:9.4.24.v20191120',
-    'org.freemarker:freemarker:2.3.29',
-    'org.xerial:sqlite-jdbc:3.50.3.0'
-  )
-
-  runtimeOnly 'org.slf4j:slf4j-simple:2.0.13'
+    mavenCentral()
 }
 
 application {
-  mainClass = 'IKT222.Assignment4.AppServer'
+    mainClass = 'IKT222.Assignment4.AppServer'
 }
 
-idea {
-  module {
-    outputDir file('build/classes/main')
-    testOutputDir file('build/classes/test')
-  }
+dependencies {
+    implementation 'org.eclipse.jetty.aggregate:jetty-all:9.4.24.v20191120'
+    implementation 'org.freemarker:freemarker:2.3.29'
+    implementation 'org.xerial:sqlite-jdbc:3.50.3.0'
+    compileOnly   'javax.servlet:javax.servlet-api:3.1.0'
+
+    // bcrypt
+    implementation 'org.mindrot:jbcrypt:0.4'
 }
 
-task submission(type: Zip) {
-  group = 'Submission'
-  description = 'Generates Zip archive suitable for submission.'
+tasks.register('submission', Zip) {
+    group = 'Submission'
+    description = 'Generates Zip archive suitable for submission.'
+    archiveFileName = 'submission.zip'
+    destinationDirectory = project.rootDir
 
-  archiveFileName = 'submission.zip'
-  destinationDirectory = project.rootDir
+    from("$project.rootDir") {
+        exclude 'submission.zip', 'build', '.git', '.gradle', '.idea'
+    }
 
-  from("$project.rootDir") {
-    exclude 'submission.zip', 'build', '.git', '.gradle', '.idea'
-  }
-
-  doFirst {
-    assert file("report.pdf").exists()
-  }
-
-  doLast {
-    logger.warn("submission.zip generated.")
-  }
+    doFirst { assert file("report.pdf").exists() }
+    doLast  { logger.warn("submission.zip generated.") }
 }
