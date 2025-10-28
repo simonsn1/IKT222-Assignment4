@@ -15,20 +15,22 @@
     <#if invalid?? && invalid><div class="alert alert-danger">Invalid username or password.</div></#if>
     <#if loggedOut?? && loggedOut><div class="alert alert-info">Logged out.</div></#if>
 
-
-    <form action="/login" method="POST">
+    <!-- Relative action works whether app runs at / or under a context path -->
+    <form action="login" method="POST">
       <div class="row"><div class="col-12 col-md-6 col-lg-4">
         <div class="form-group">
           <label for="uid">User ID</label>
           <input id="uid" type="text" class="form-control" name="username" required>
         </div>
       </div></div>
+
       <div class="row"><div class="col-12 col-md-6 col-lg-4">
         <div class="form-group">
           <label for="pwd">Password</label>
           <input id="pwd" type="password" class="form-control" name="password" required>
         </div>
       </div></div>
+
       <button type="submit" class="mt-2 btn btn-primary">Log in</button>
     </form>
   </div>

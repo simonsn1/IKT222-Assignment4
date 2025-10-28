@@ -10,55 +10,44 @@ import javax.servlet.http.*;
 
 import freemarker.template.*;
 
-@WebServlet(urlPatterns = { "/", "/login", "/search", "/logout" })
+@WebServlet(urlPatterns = { "/", "/login", "/search", "/logout" }, loadOnStartup = 1)
 @SuppressWarnings("serial")
 public class AppServlet extends HttpServlet {
-
-  private static final String CONNECTION_URL = "jdbc:sqlite:db.sqlite3";
 
   private final Configuration fm = new Configuration(Configuration.VERSION_2_3_28);
   private Connection database;
 
-  // ---- app startup ----------------------------------------------------------
   @Override
   public void init() throws ServletException {
-    configureTemplateEngine();   // set FreeMarker template loader, etc.
-    connectToDatabase();         // open SQLite and print absolute path
-
-    // One-time migration: re-hash any plaintext passwords to bcrypt.
-    // After you see [MIGRATE] logs once, comment this call out.
-    try {
-      bulkRehashLegacyPasswordsOnce();
-    } catch (SQLException e) {
-      throw new ServletException(e);
-    }
+    configureTemplateEngine();
+    connectToDatabase(); // same absolute-root db.sqlite3 as before
   }
 
-  // ---- templating -----------------------------------------------------------
   private void configureTemplateEngine() throws ServletException {
     try {
       fm.setServletContextForTemplateLoading(getServletContext(), "/WEB-INF/templates");
       fm.setDefaultEncoding("UTF-8");
+      // Keep debug handler during development so you see useful template errors:
       fm.setTemplateExceptionHandler(TemplateExceptionHandler.HTML_DEBUG_HANDLER);
       fm.setLogTemplateExceptions(false);
       fm.setWrapUncheckedExceptions(true);
+      fm.setTemplateUpdateDelayMilliseconds(0); // hot reload while dev
     } catch (Exception error) {
       throw new ServletException(error.getMessage());
     }
   }
 
-  // ---- database -------------------------------------------------------------
   private void connectToDatabase() throws ServletException {
     try {
-      database = DriverManager.getConnection(CONNECTION_URL);
-      database.setAutoCommit(true); // ensure UPDATEs persist
-      System.out.println("[DB] Connected to: " + new java.io.File("db.sqlite3").getAbsolutePath());
+      // Use the exact same DB file that was working for you:
+      String url = "jdbc:sqlite:" + new java.io.File("db.sqlite3").getAbsolutePath();
+      database = DriverManager.getConnection(url);
+      database.setAutoCommit(true);
     } catch (SQLException error) {
-      throw new ServletException(error.getMessage());
+      throw new ServletException(error);
     }
   }
 
-  // ---- helpers --------------------------------------------------------------
   private String path(HttpServletRequest req) {
     String p = req.getServletPath();
     if (p == null || p.isEmpty()) p = req.getPathInfo();
@@ -82,7 +71,6 @@ public class AppServlet extends HttpServlet {
     return c == null ? "" : c;
   }
 
-  // ---- HTTP handlers --------------------------------------------------------
   @Override
   protected void doGet(HttpServletRequest req, HttpServletResponse res)
       throws ServletException, IOException {
@@ -122,8 +110,10 @@ public class AppServlet extends HttpServlet {
     try {
       switch (path(req)) {
         case "/login": {
-          String u = req.getParameter("username");
-          String p = req.getParameter("password");
+          try { req.setCharacterEncoding("UTF-8"); } catch (Exception ignore) {}
+          String u = optTrim(req.getParameter("username"));
+          String p = optTrim(req.getParameter("password"));
+
           if (authenticated(u, p)) {
             HttpSession s = req.getSession(true);
             s.setAttribute("user", u);
@@ -152,46 +142,25 @@ public class AppServlet extends HttpServlet {
     }
   }
 
-  // ---- auth + data access ---------------------------------------------------
-  // Login:
-  // - prepared SELECT (prevents SQLi)
-  // - if bcrypt hash present -> verify
-  // - else if legacy plaintext matches -> upgrade to bcrypt and return true
+  private static String optTrim(String s) {
+    return (s == null) ? null : s.trim();
+  }
+
+  // Auth: look up the user's bcrypt hash and verify it.
   private boolean authenticated(String username, String password) throws SQLException {
-    String sql = "SELECT id, password, password_hash FROM user WHERE username = ?";
+    if (username == null || password == null) return false;
+
+    String sql = "SELECT password_hash FROM user WHERE username = ?";
     try (PreparedStatement ps = database.prepareStatement(sql)) {
       ps.setString(1, username);
       try (ResultSet rs = ps.executeQuery()) {
-        if (!rs.next()) return false;
-
-        int id = rs.getInt("id");
-        String legacyPlain = rs.getString("password");
-        String storedHash  = rs.getString("password_hash");
-
-        if (Passwords.looksHashed(storedHash)) {
-          System.out.println("[AUTH] Using bcrypt verify for user: " + username);
-          return Passwords.verify(password, storedHash);
-        }
-
-        String compare = (storedHash != null) ? storedHash : legacyPlain;
-        if (compare != null && compare.equals(password)) {
-          String newHash = Passwords.hash(password);
-          try (PreparedStatement up = database.prepareStatement(
-              "UPDATE user SET password_hash = ? WHERE id = ?")) {
-            up.setString(1, newHash);
-            up.setInt(2, id);
-            int rows = up.executeUpdate();
-            System.out.println("[AUTH] Upgraded plaintext -> bcrypt for user: " + username + " (rows=" + rows + ")");
-          }
-          return true;
-        }
-        System.out.println("[AUTH] Invalid password for user: " + username);
-        return false;
+        if (!rs.next()) return false;      // no such user
+        String hash = rs.getString(1);     // bcrypt hash
+        return hash != null && Passwords.verify(password, hash);
       }
     }
   }
 
-  // Patient search (prepared LIKE to avoid SQLi)
   private java.util.List<Record> searchResults(String surname) throws SQLException {
     java.util.List<Record> list = new java.util.ArrayList<>();
     String sql = "SELECT * FROM patient WHERE surname LIKE ?";
@@ -211,31 +180,5 @@ public class AppServlet extends HttpServlet {
       }
     }
     return list;
-  }
-
-  // One-time startup migration: hash any row that still has plaintext.
-  private void bulkRehashLegacyPasswordsOnce() throws SQLException {
-    String select = "SELECT id, username, password, password_hash FROM user";
-    try (Statement st = database.createStatement();
-         ResultSet rs = st.executeQuery(select)) {
-      while (rs.next()) {
-        int id = rs.getInt("id");
-        String username = rs.getString("username");
-        String hash = rs.getString("password_hash");
-        String plain = rs.getString("password");
-        if (hash == null || hash.isEmpty() || !Passwords.looksHashed(hash)) {
-          if (plain != null && !plain.isEmpty()) {
-            String newHash = Passwords.hash(plain);
-            try (PreparedStatement up = database.prepareStatement(
-                "UPDATE user SET password_hash = ? WHERE id = ?")) {
-              up.setString(1, newHash);
-              up.setInt(2, id);
-              up.executeUpdate();
-              System.out.println("[MIGRATE] Rehashed user: " + username);
-            }
-          }
-        }
-      }
-    }
   }
 }
